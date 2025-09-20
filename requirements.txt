@@ -2,3 +2,4 @@ streamlit
 yfinance
 pandas
 vaderSentiment
+pandas_ta
