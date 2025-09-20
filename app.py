@@ -1,44 +1,62 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import pandas_ta as ta
 
-st.title("Nifty 200 Weekly Gainers (>10%) Scanner")
+st.title("Nifty 200 Technical Analysis Scanner")
 
-# A sample list of Nifty 200 tickers
-# You can expand this list with the full Nifty 200 tickers
 nifty200_tickers = [
     "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS",
     "INFY.NS", "HINDUNILVR.NS", "KOTAKBANK.NS", "SBIN.NS",
     "ITC.NS", "BHARTIARTL.NS"
 ]
 
-st.write(f"Scanning {len(nifty200_tickers)} Nifty 200 stocks...")
+st.write(f"Scanning {len(nifty200_tickers)} stocks with detailed technical analysis...")
 
-gainers = []
+results = []
 
 for ticker in nifty200_tickers:
     try:
-        data = yf.Ticker(ticker).history(period="8d", interval="1d")  # last 8 days of daily data
-        if len(data) < 6:
-            continue  # skip if data is insufficient
+        data = yf.Ticker(ticker).history(period="60d")  # last 60 days
+        if len(data) < 50:
+            continue
+        
+        # Calculate indicators
+        data['RSI'] = ta.rsi(data['Close'], length=14)
+        data['MACD'] = ta.macd(data['Close']).iloc[:,0]  # MACD line
+        data['MACD_signal'] = ta.macd(data['Close']).iloc[:,1]  # Signal line
+        data['SMA_50'] = data['Close'].rolling(window=50).mean()
+        data['SMA_20'] = data['Close'].rolling(window=20).mean()
+        data['ATR'] = ta.atr(data['High'], data['Low'], data['Close'], length=14)
 
-        start_price = data['Close'][0]
-        end_price = data['Close'][-1]
-        pct_change = (end_price - start_price) / start_price * 100
+        # Latest values
+        latest = data.iloc[-1]
 
-        if pct_change >= 10:
-            gainers.append({
-                "Ticker": ticker,
-                "Start Price": round(start_price, 2),
-                "End Price": round(end_price, 2),
-                "Weekly % Gain": round(pct_change, 2)
+        # Define simple buy conditions
+        cond1 = latest['RSI'] < 30  # oversold RSI
+        cond2 = latest['MACD'] > latest['MACD_signal']  # MACD crossover
+        cond3 = latest['SMA_20'] > latest['SMA_50']  # short SMA above long SMA
+
+        # Stock qualifies to watch if 2 of 3 conds true
+        score = sum([cond1, cond2, cond3])
+        if score >= 2:
+            results.append({
+                'Ticker': ticker,
+                'RSI': round(latest['RSI'], 2),
+                'MACD': round(latest['MACD'], 3),
+                'MACD_signal': round(latest['MACD_signal'], 3),
+                'SMA_20': round(latest['SMA_20'], 2),
+                'SMA_50': round(latest['SMA_50'], 2),
+                'ATR': round(latest['ATR'], 2),
+                'Buy Signal Score': score
             })
+        
     except Exception as e:
-        st.write(f"Skipped {ticker} due to error: {str(e)}")
+        st.write(f"Skipped {ticker}: {str(e)}")
 
-if gainers:
-    df = pd.DataFrame(gainers)
-    st.subheader("Stocks with ≥10% Weekly Gain")
+if results:
+    df = pd.DataFrame(results)
+    st.subheader("Stocks passing buy signal criteria")
     st.dataframe(df)
 else:
-    st.write("No Nifty 200 stocks gained 10% or more in the last week.")
+    st.write("No stocks passing the buy signal criteria found.")
