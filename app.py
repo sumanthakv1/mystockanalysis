@@ -1,52 +1,44 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-# Title and subtitle
-st.title("Advanced AI Stock Analysis Utility")
-st.write("Enter a stock ticker (e.g., TCS.NS for Tata Consultancy Services).")
+st.title("Nifty 200 Weekly Gainers (>10%) Scanner")
 
-# Input field for ticker symbol
-ticker = st.text_input("Stock ticker")
+# A sample list of Nifty 200 tickers
+# You can expand this list with the full Nifty 200 tickers
+nifty200_tickers = [
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS",
+    "INFY.NS", "HINDUNILVR.NS", "KOTAKBANK.NS", "SBIN.NS",
+    "ITC.NS", "BHARTIARTL.NS"
+]
 
-if ticker:
+st.write(f"Scanning {len(nifty200_tickers)} Nifty 200 stocks...")
+
+gainers = []
+
+for ticker in nifty200_tickers:
     try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="3mo")
+        data = yf.Ticker(ticker).history(period="8d", interval="1d")  # last 8 days of daily data
+        if len(data) < 6:
+            continue  # skip if data is insufficient
 
-        st.subheader(f"{ticker} Closing Prices")
-        st.line_chart(hist['Close'])
+        start_price = data['Close'][0]
+        end_price = data['Close'][-1]
+        pct_change = (end_price - start_price) / start_price * 100
 
-        hist['SMA_20'] = hist['Close'].rolling(window=20).mean()
-        hist['SMA_50'] = hist['Close'].rolling(window=50).mean()
-
-        st.subheader("20 & 50 Day Simple Moving Averages (SMA)")
-        st.line_chart(hist[['Close', 'SMA_20', 'SMA_50']])
-
-        st.subheader("Basic Company Info")
-        info = stock.info
-        st.write(f"**Market Cap:** {info.get('marketCap', 'N/A')}")
-        st.write(f"**Trailing P/E:** {info.get('trailingPE', 'N/A')}")
-        st.write(f"**Forward P/E:** {info.get('forwardPE', 'N/A')}")
-        st.write(f"**Return on Equity:** {info.get('returnOnEquity', 'N/A')}")
-
-        sample_news = [
-            "Company reports record quarterly profits.",
-            "New product launch may boost future revenues.",
-            "Regulatory concerns on upcoming projects.",
-            "CEO resigns unexpectedly.",
-        ]
-
-        st.subheader("Sample News Sentiment Analysis")
-        analyzer = SentimentIntensityAnalyzer()
-        for headline in sample_news:
-            score = analyzer.polarity_scores(headline)['compound']
-            sentiment = "Positive" if score > 0.05 else "Neutral" if score > -0.05 else "Negative"
-            st.write(f"News: {headline}")
-            st.write(f"Sentiment score: {score} ({sentiment})")
-            st.markdown("---")
-
+        if pct_change >= 10:
+            gainers.append({
+                "Ticker": ticker,
+                "Start Price": round(start_price, 2),
+                "End Price": round(end_price, 2),
+                "Weekly % Gain": round(pct_change, 2)
+            })
     except Exception as e:
-        st.error(f"Error retrieving data for ticker '{ticker}'. Please check the symbol and try again.")
+        st.write(f"Skipped {ticker} due to error: {str(e)}")
 
+if gainers:
+    df = pd.DataFrame(gainers)
+    st.subheader("Stocks with ≥10% Weekly Gain")
+    st.dataframe(df)
+else:
+    st.write("No Nifty 200 stocks gained 10% or more in the last week.")
