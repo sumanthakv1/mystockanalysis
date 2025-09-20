@@ -3,26 +3,49 @@ import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
 
-st.title("Nifty 200 Technical & Fundamental Analysis Scanner with Trade Levels")
+st.title("Nifty Index Technical & Fundamental Scanner with Trade Levels")
 
-# Sample Nifty 200 ticker list (expand or fetch dynamically as needed)
-nifty200_tickers = [
-    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS",
-    "INFY.NS", "HINDUNILVR.NS", "KOTAKBANK.NS", "SBIN.NS",
-    "ITC.NS", "BHARTIARTL.NS"
+# Define ticker lists for different Nifty indices (sample tickers for demo)
+nifty_50_tickers = [
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS",
+    "HINDUNILVR.NS", "ICICIBANK.NS", "KOTAKBANK.NS", "SBIN.NS"
 ]
 
-st.write(f"Scanning {len(nifty200_tickers)} stocks with detailed technical and fundamental analysis...")
+nifty_100_extra = [
+    "ADANIPORTS.NS", "ASIANPAINT.NS", "BAJFINANCE.NS", "BHARTIARTL.NS"
+]
+
+nifty_200_extra = [
+    "BRITANNIA.NS", "CIPLA.NS", "DRREDDY.NS", "EICHERMOT.NS"
+]
+
+nifty_500_extra = [
+    "ABCAPITAL.NS", "APOLLOHOSP.NS", "BHEL.NS", "COALINDIA.NS"
+]
+
+# Combine for different indices
+indices = {
+    "Nifty 50": nifty_50_tickers,
+    "Nifty 100": nifty_50_tickers + nifty_100_extra,
+    "Nifty 200": nifty_50_tickers + nifty_100_extra + nifty_200_extra,
+    "Nifty 500": nifty_50_tickers + nifty_100_extra + nifty_200_extra + nifty_500_extra
+}
+
+# User selectbox for index choice
+index_choice = st.selectbox("Select Nifty index to scan:", list(indices.keys()))
+
+tickers = indices[index_choice]
+
+st.write(f"Scanning {len(tickers)} stocks from {index_choice} with detailed technical and fundamental analysis...")
 
 results = []
 
-for ticker in nifty200_tickers:
+for ticker in tickers:
     try:
-        data = yf.Ticker(ticker).history(period="60d")  # last 60 days
+        data = yf.Ticker(ticker).history(period="60d")
         if len(data) < 50:
             continue
 
-        # Technical Indicators
         data['RSI'] = ta.rsi(data['Close'], length=14)
         macd = ta.macd(data['Close'])
         data['MACD'] = macd.iloc[:, 0]
@@ -33,14 +56,12 @@ for ticker in nifty200_tickers:
 
         latest = data.iloc[-1]
 
-        # Technical buy signal conditions
-        cond1 = latest['RSI'] < 30  # oversold
-        cond2 = latest['MACD'] > latest['MACD_signal']  # MACD crossover
-        cond3 = latest['SMA_20'] > latest['SMA_50']  # short SMA above long SMA
+        cond1 = latest['RSI'] < 30
+        cond2 = latest['MACD'] > latest['MACD_signal']
+        cond3 = latest['SMA_20'] > latest['SMA_50']
 
         tech_score = sum([cond1, cond2, cond3])
 
-        # Fundamental Analysis
         info = yf.Ticker(ticker).info
 
         pe = info.get('trailingPE', None)
@@ -59,12 +80,11 @@ for ticker in nifty200_tickers:
 
         funda_filter_pass = funda_score >= 3
 
-        # Calculate trade levels if both filters pass
         if tech_score >= 2 and funda_filter_pass:
             cmp = latest['Close']
-            buy_price = cmp  # current price as buy price
-            target_sell_price = buy_price * 1.10  # target 10% gain
-            stop_loss = buy_price * 0.97  # stop loss 3% below buy price
+            buy_price = cmp
+            target_sell_price = buy_price * 1.10
+            stop_loss = buy_price * 0.97
 
             results.append({
                 'Ticker': ticker,
@@ -86,13 +106,12 @@ for ticker in nifty200_tickers:
                 'Technical Score': tech_score,
                 'Fundamental Score': funda_score
             })
-
     except Exception as e:
         st.write(f"Skipped {ticker}: {str(e)}")
 
 if results:
     df = pd.DataFrame(results)
-    st.subheader("Stocks Passing Combined Technical & Fundamental Filters with Trade Levels")
+    st.subheader(f"Stocks Passing Filters in {index_choice}")
     st.dataframe(df)
 else:
-    st.write("No stocks passed the combined technical and fundamental criteria.")
+    st.write(f"No stocks passed the filters in {index_choice}.")
