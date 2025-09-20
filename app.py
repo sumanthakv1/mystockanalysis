@@ -75,7 +75,7 @@ def analyze_stock(ticker):
             'Close': round(latest['Close'], 2),
             'ATR': round(latest['ATR'], 2)
         }
-    except Exception as e:
+    except Exception:
         return None
 
 def filter_stocks(stocks):
@@ -130,7 +130,15 @@ filtered_stocks = filter_stocks(stocks_data)
 
 if filtered_stocks:
     df = pd.DataFrame(filtered_stocks)
+    
+    # Explicitly show CMP, Buy Price, Stop Loss, Target Sell Price upfront with other key columns
+    display_columns = ['Ticker', 'Close', 'Buy Price', 'Stop Loss', 'Target Sell Price',
+                       'Risk-Reward', 'Breakout_Score', 'Fundamental Score', 'News Sentiment',
+                       'RSI', 'MACD_Cross', 'Accumulation_Up', 'ATR', 'P/E', 'P/B', 'Debt/Equity', 'ROE', 'Earnings Growth']
+
+    available_cols = [col for col in display_columns if col in df.columns]
+
     st.subheader(f"Recommended Stocks with Breakout & 1:3 Risk-Reward")
-    st.dataframe(df)
+    st.dataframe(df[available_cols].sort_values(by='Risk-Reward', ascending=False).reset_index(drop=True))
 else:
     st.write("No stocks match the criteria currently.")
