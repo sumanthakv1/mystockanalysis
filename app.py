@@ -3,9 +3,9 @@ import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
 
-st.title("Nifty 200 Technical & Fundamental Analysis Scanner")
+st.title("Nifty 200 Technical & Fundamental Analysis Scanner with Trade Levels")
 
-# Sample Nifty 200 ticker list (expand as needed)
+# Sample Nifty 200 ticker list (expand or fetch dynamically as needed)
 nifty200_tickers = [
     "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS",
     "INFY.NS", "HINDUNILVR.NS", "KOTAKBANK.NS", "SBIN.NS",
@@ -38,7 +38,7 @@ for ticker in nifty200_tickers:
         cond2 = latest['MACD'] > latest['MACD_signal']  # MACD crossover
         cond3 = latest['SMA_20'] > latest['SMA_50']  # short SMA above long SMA
 
-        score = sum([cond1, cond2, cond3])
+        tech_score = sum([cond1, cond2, cond3])
 
         # Fundamental Analysis
         info = yf.Ticker(ticker).info
@@ -56,12 +56,22 @@ for ticker in nifty200_tickers:
         growth_ok = earnings_growth is not None and earnings_growth > 0.05
 
         funda_score = sum([pe_ok, pb_ok, debt_ok, roe_ok, growth_ok])
+
         funda_filter_pass = funda_score >= 3
 
-        # Final combined filter
-        if score >= 2 and funda_filter_pass:
+        # Calculate trade levels if both filters pass
+        if tech_score >= 2 and funda_filter_pass:
+            cmp = latest['Close']
+            buy_price = cmp  # current price as buy price
+            target_sell_price = buy_price * 1.10  # target 10% gain
+            stop_loss = buy_price * 0.97  # stop loss 3% below buy price
+
             results.append({
                 'Ticker': ticker,
+                'CMP': round(cmp, 2),
+                'Buy Price': round(buy_price, 2),
+                'Target Sell Price': round(target_sell_price, 2),
+                'Stop Loss': round(stop_loss, 2),
                 'RSI': round(latest['RSI'], 2),
                 'MACD': round(latest['MACD'], 3),
                 'MACD_signal': round(latest['MACD_signal'], 3),
@@ -73,7 +83,7 @@ for ticker in nifty200_tickers:
                 'Debt/Equity': round(debt_equity, 2) if debt_equity else None,
                 'ROE': round(roe, 2) if roe else None,
                 'Earnings Growth': round(earnings_growth, 2) if earnings_growth else None,
-                'Technical Score': score,
+                'Technical Score': tech_score,
                 'Fundamental Score': funda_score
             })
 
@@ -82,7 +92,7 @@ for ticker in nifty200_tickers:
 
 if results:
     df = pd.DataFrame(results)
-    st.subheader("Stocks Passing Combined Technical & Fundamental Filters")
+    st.subheader("Stocks Passing Combined Technical & Fundamental Filters with Trade Levels")
     st.dataframe(df)
 else:
     st.write("No stocks passed the combined technical and fundamental criteria.")
