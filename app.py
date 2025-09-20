@@ -4,19 +4,35 @@ import pandas as pd
 import pandas_ta as ta
 from nsepython import nse_fno_oi
 
-st.title("Nifty Index Scanner with Internal F&O Data Impact")
+st.title("Nifty & NSE Universe Scanner with Technical, Fundamental, and F&O Impact")
 
-# Sample ticker list (expand as needed)
-nifty200_tickers = [
-    "RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", 
-    "HINDUNILVR", "KOTAKBANK", "SBIN", "ITC", "BHARTIARTL"
-]
+# Sample tickers for each Nifty group (expand or fetch dynamically)
+nifty_50 = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "HINDUNILVR", "KOTAKBANK", "SBIN", "ITC", "BHARTIARTL"]
+nifty_100_extra = ["BAJFINANCE", "ADANIPORTS", "ASIANPAINT", "ULTRACEMCO", "MARUTI"]
+nifty_200_extra = ["CIPLA", "EICHERMOT", "BRITANNIA", "DRREDDY", "TITAN"]
+nifty_500_extra = ["APOLLOHOSP", "BHEL", "COALINDIA", "GRASIM", "HCLTECH"]
+nifty_1000_extra = ["INDIGO", "MUTHOOTFIN", "PAGEIND", "TATAMOTORS", "ZEEL"]
+nifty_all_extra = ["REPCOHOME", "SAIL", "WIPRO", "YESBANK", "ZOMATO"]
 
-st.write(f"Scanning {len(nifty200_tickers)} stocks with technical, fundamental analysis and F&O impact...")
+indices = {
+    "Nifty 50": nifty_50,
+    "Nifty 100": nifty_50 + nifty_100_extra,
+    "Nifty 200": nifty_50 + nifty_100_extra + nifty_200_extra,
+    "Nifty 500": nifty_50 + nifty_100_extra + nifty_200_extra + nifty_500_extra,
+    "Nifty 1000": nifty_50 + nifty_100_extra + nifty_200_extra + nifty_500_extra + nifty_1000_extra,
+    "NSE All": nifty_50 + nifty_100_extra + nifty_200_extra + nifty_500_extra + nifty_1000_extra + nifty_all_extra
+}
+
+# User selection of universe
+universe = st.selectbox("Select Stock Universe to Scan:", list(indices.keys()))
+
+tickers = indices[universe]
+
+st.write(f"Scanning {len(tickers)} stocks from {universe} with technical, fundamental, and F&O data impact...")
 
 results = []
 
-for ticker in nifty200_tickers:
+for ticker in tickers:
     try:
         ticker_ns = ticker + ".NS"
         data = yf.Ticker(ticker_ns).history(period="60d")
@@ -34,14 +50,15 @@ for ticker in nifty200_tickers:
 
         latest = data.iloc[-1]
 
-        # Technical buy signal conditions
         cond1 = latest['RSI'] < 30
         cond2 = latest['MACD'] > latest['MACD_signal']
         cond3 = latest['SMA_20'] > latest['SMA_50']
+
         tech_score = sum([cond1, cond2, cond3])
 
         # Fundamental Analysis
         info = yf.Ticker(ticker_ns).info
+
         pe = info.get('trailingPE', None)
         pb = info.get('priceToBook', None)
         debt_equity = info.get('debtToEquity', None)
@@ -53,27 +70,25 @@ for ticker in nifty200_tickers:
         debt_ok = debt_equity is not None and debt_equity < 1.5
         roe_ok = roe is not None and roe > 0.15
         growth_ok = earnings_growth is not None and earnings_growth > 0.05
+
         funda_score = sum([pe_ok, pb_ok, debt_ok, roe_ok, growth_ok])
 
-        # Fetch F&O data internally for scoring impact
+        # Fetch F&O data internally
         fno_data = nse_fno_oi(ticker)
         call_oi = fno_data.get('callOI', 0)
         put_oi = fno_data.get('putOI', 0)
         pcr = put_oi / call_oi if call_oi > 0 else None
 
-        # Heuristic F&O impact score: neutral=0, bullish if PCR < 1, bearish if PCR > 1
         fno_score = 0
         if pcr is not None:
             if pcr < 0.8:
-                fno_score = 1  # bullish bias
+                fno_score = 1
             elif pcr > 1.2:
-                fno_score = -1  # bearish bias
+                fno_score = -1
 
-        # Weighted combined score including F&O impact
-        combined_score = tech_score + funda_score + fno_score  # simple sum for demo
+        combined_score = tech_score + funda_score + fno_score
 
-        # Filters for passing stock
-        if combined_score >= 6:  # adjust threshold as needed
+        if combined_score >= 6:
             cmp = latest['Close']
             buy_price = cmp
             target_sell_price = buy_price * 1.10
@@ -99,7 +114,7 @@ for ticker in nifty200_tickers:
                 'Technical Score': tech_score,
                 'Fundamental Score': funda_score,
                 'F&O Impact Score': fno_score,
-                'Combined Score': combined_score,
+                'Combined Score': combined_score
             })
 
     except Exception as e:
@@ -107,7 +122,7 @@ for ticker in nifty200_tickers:
 
 if results:
     df = pd.DataFrame(results)
-    st.subheader("Stocks with positive combined scores including F&O impact")
+    st.subheader(f"Stocks Passing Filters in {universe} Universe")
     st.dataframe(df)
 else:
-    st.write("No stocks passed the combined score criteria.")
+    st.write(f"No stocks passed the filters in {universe}.")
