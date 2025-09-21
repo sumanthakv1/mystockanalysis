@@ -3,7 +3,6 @@ import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
 
-# Placeholder for news sentiment function
 def get_news_sentiment(ticker):
     # TODO: Replace with real financial news sentiment analysis per ticker or sector
     return 0.0
@@ -21,7 +20,6 @@ def fetch_stock_data(ticker):
     data['MACD_signal'] = macd.iloc[:, 1]
     data['ATR'] = ta.atr(data['High'], data['Low'], data['Close'], length=14)
     data['AD'] = ta.ad(data['High'], data['Low'], data['Close'], data['Volume'])
-    
     latest = data.iloc[-1]
     return data, latest
 
@@ -29,32 +27,26 @@ def analyze_stock(ticker):
     data, latest = fetch_stock_data(ticker)
     if data is None or latest is None:
         return None
-
     try:
         breakout_20d = latest['Close'] > latest['20d_High']
         breakout_50d = latest['Close'] > latest['50d_High']
         volume_spike = latest['Volume'] > 1.5 * latest['20d_Vol_Avg']
         rsi_ok = latest['RSI'] > 60
         macd_cross = latest['MACD'] > latest['MACD_signal']
-
         ad_trend = data['AD'].iloc[-5:]
         accumulation_up = ad_trend.is_monotonic_increasing if len(ad_trend) == 5 else False
-
         breakout_score = sum([breakout_20d, breakout_50d, volume_spike, rsi_ok, macd_cross, accumulation_up])
-
         info = yf.Ticker(ticker).info
         pe = info.get('trailingPE')
         pb = info.get('priceToBook')
         debt_equity = info.get('debtToEquity')
         roe = info.get('returnOnEquity')
         earnings_growth = info.get('earningsQuarterlyGrowth')
-
         pe_ok = pe is not None and pe < 30
         pb_ok = pb is not None and pb < 5
         debt_ok = debt_equity is not None and debt_equity < 1.5
         roe_ok = roe is not None and roe > 0.15
         growth_ok = earnings_growth is not None and earnings_growth > 0.05
-
         funda_score = sum([pe_ok, pb_ok, debt_ok, roe_ok, growth_ok])
 
         return {
@@ -83,10 +75,8 @@ def filter_stocks(stocks):
     for stock in stocks:
         if stock is None:
             continue
-
         news_sentiment = get_news_sentiment(stock['Ticker'])
         combined_score = stock['Breakout_Score'] + stock['Fundamental Score'] + news_sentiment
-
         buy_price = stock['Close']
         stop_loss = buy_price - stock['ATR']
         if stop_loss <= 0:
@@ -94,7 +84,6 @@ def filter_stocks(stocks):
         risk = buy_price - stop_loss
         target_sell = buy_price + 3 * risk
         risk_reward = (target_sell - buy_price) / risk
-
         if risk_reward >= 3 and combined_score >= 5:
             stock.update({
                 'Buy Price': buy_price,
@@ -108,20 +97,29 @@ def filter_stocks(stocks):
     return recommendations
 
 
-st.title("Breakout & Fundamental Stock Scanner with News Sentiment & 1:3 Risk-Reward")
+st.title("Breakout & Fundamental Stock Scanner\nwith News Sentiment & 1:3 Risk-Reward")
 
-# Select universe (expand as needed)
+# Sample tickers for each universe; expand/replace as you wish!
 nifty_50 = [
     "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS",
     "HINDUNILVR.NS", "KOTAKBANK.NS", "SBIN.NS", "ITC.NS", "BHARTIARTL.NS"
 ]
+nifty_100_extra = ["BAJFINANCE.NS", "ADANIPORTS.NS", "ASIANPAINT.NS", "ULTRACEMCO.NS", "MARUTI.NS"]
+nifty_200_extra = ["CIPLA.NS", "EICHERMOT.NS", "BRITANNIA.NS", "DRREDDY.NS", "TITAN.NS"]
+nifty_500_extra = ["APOLLOHOSP.NS", "BHEL.NS", "COALINDIA.NS", "GRASIM.NS", "HCLTECH.NS"]
+nifty_1000_extra = ["INDIGO.NS", "MUTHOOTFIN.NS", "PAGEIND.NS", "TATAMOTORS.NS", "ZEEL.NS"]
 
-univ_choice = st.selectbox("Select Universe to Scan:", ["Nifty 50"])  # Expand options as desired
+indices = {
+    "Nifty 50": nifty_50,
+    "Nifty 100": nifty_50 + nifty_100_extra,
+    "Nifty 200": nifty_50 + nifty_100_extra + nifty_200_extra,
+    "Nifty 500": nifty_50 + nifty_100_extra + nifty_200_extra + nifty_500_extra,
+    "Nifty 1000": nifty_50 + nifty_100_extra + nifty_200_extra + nifty_500_extra + nifty_1000_extra,
+    "NSE All": nifty_50 + nifty_100_extra + nifty_200_extra + nifty_500_extra + nifty_1000_extra,
+}
 
-if univ_choice == "Nifty 50":
-    tickers = nifty_50
-else:
-    tickers = []
+univ_choice = st.selectbox("Select Universe to Scan:", list(indices.keys()))
+tickers = indices[univ_choice]
 
 with st.spinner("Analyzing stocks..."):
     stocks_data = [analyze_stock(ticker) for ticker in tickers]
@@ -130,15 +128,11 @@ filtered_stocks = filter_stocks(stocks_data)
 
 if filtered_stocks:
     df = pd.DataFrame(filtered_stocks)
-    
-    # Explicitly show CMP, Buy Price, Stop Loss, Target Sell Price upfront with other key columns
     display_columns = ['Ticker', 'Close', 'Buy Price', 'Stop Loss', 'Target Sell Price',
                        'Risk-Reward', 'Breakout_Score', 'Fundamental Score', 'News Sentiment',
                        'RSI', 'MACD_Cross', 'Accumulation_Up', 'ATR', 'P/E', 'P/B', 'Debt/Equity', 'ROE', 'Earnings Growth']
-
     available_cols = [col for col in display_columns if col in df.columns]
-
-    st.subheader(f"Recommended Stocks with Breakout & 1:3 Risk-Reward")
+    st.subheader(f"Recommended Stocks with Breakout & 1:3 Risk-Reward in {univ_choice}")
     st.dataframe(df[available_cols].sort_values(by='Risk-Reward', ascending=False).reset_index(drop=True))
 else:
     st.write("No stocks match the criteria currently.")
